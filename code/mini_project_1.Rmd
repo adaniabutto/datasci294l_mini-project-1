@@ -64,7 +64,7 @@ data_dir = '../data/'
 
 # Import data with participant info
 df.raw =
-  read.csv("psych_139_mini_project_1_split_80_responses.csv")
+  read.csv(paste0(data_dir, "psych_139_mini_project_1_split_80_responses.csv"))
 
 ```
 
@@ -880,7 +880,7 @@ cat("Baseline RMSE =", round(baseline_rmse, 1),"%\n",
 
 # Import held out data with participant info
 df.heldout =
-  read.csv("test_data.csv")
+  read.csv(paste0(data_dir, "test_data.csv"))
 
 # add column with binary vs MC information
 df.heldout_binaryvsmc =
