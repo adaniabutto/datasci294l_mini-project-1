@@ -1,0 +1,13 @@
+"0","# merge datasets
+prediction_final =
+  pred_mc %>%
+  mutate(item_id = as.numeric(item_id)) %>%
+  bind_rows(pred_binary, pred_mc) %>%
+  arrange(item_id)
+"
+"1","[1m[33mError[39m in `bind_rows()`:[22m
+[33m![39m Can't combine `..1$item_id` <double> and `..2$item_id` <character>.
+Backtrace:
+[90m 1. [39m... %>% arrange(item_id)
+[90m 3. [39m[1m[94mdplyr::bind_rows([39m[22m., pred_binary, pred_mc[1m[94m)[39m[22m
+"

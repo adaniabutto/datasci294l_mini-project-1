@@ -1,0 +1,32 @@
+"0","df.wide_summary %>%
+  ggplot(aes(x = reorder(question_text, mean_correct),
+             y = mean_correct),
+         color = graph_type) +
+  geom_point(aes(fill = graph_type),
+             shape = 21, color = ""black"", size = 2) +
+  geom_segment(aes(xend = question_text,
+                   y = 0,
+                   yend = mean_correct),
+               color = ""darkgrey"") +
+  facet_wrap(~ task_type_merged + test_name,
+             ncol = 5, scales = ""free_y"") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1)) +
+  # scale_fill_brewer(palette = ""Set2"") +
+  theme(axis.text.x = element_blank()) +
+  # theme(axis.text.x = element_text(angle = 90,
+  #                                  hjust = 1)) +
+  labs(title = ""Item Difficulty by Test"",
+       x = ""Question"",
+       y = ""% Correct"")
+"
+"2","Warning in gzfile(file, ""wb"") :"
+"2","
+ "
+"2"," cannot open compressed file '/Users/ottuba/Desktop/studies/PhD Studies/phd classes/Stanford Spring quarter 2025/PSYCH139_DATASCI294/Mini-project 1/.Rproj.user/shared/notebooks/A7771F1C-mini_project_1/1/FC0C8FC1256318ec/ce2vkqyta2joz_t/0f649c5e457a461992008358ce3a8562.snapshot', probable reason 'No such file or directory'
+"
+"2","Error in gzfile(file, ""wb"") : cannot open the connection
+"
+"2","Error in dev.off() : 
+  QuartzBitmap_Output - unable to open file '/Users/ottuba/Desktop/studies/PhD Studies/phd classes/Stanford Spring quarter 2025/PSYCH139_DATASCI294/Mini-project 1/.Rproj.user/shared/notebooks/A7771F1C-mini_project_1/1/FC0C8FC1256318ec/ce2vkqyta2joz_t/_rs_chunk_plot_001.png'
+"

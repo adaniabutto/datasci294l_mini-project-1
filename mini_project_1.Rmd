@@ -1,0 +1,978 @@
+---
+title: "Mini-Project 1"
+author: "Adani B. Abutto"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: cosmo
+    highlight: tango
+
+header-includes:
+    - \usepackage{setspace}\doublespacing
+---
+
+# Setup
+
+```{r, message = F, warning = F}
+
+## load relevant libraries and functions
+require(knitr)         # for knitting
+library(Hmisc)         # for descriptives
+library(png)           # for working with images
+library(grid)
+library(DT)            # for data tables
+library(tidyverse)     # for everything else
+library(ggeffects)     # for regression outputs
+library(emmeans)
+library(generics)
+library(broom)
+library(modelr)
+library(ltm)           # for IRT stuff
+library(TAM)
+library(psych)
+
+## set default code chunk options
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+
+## set default plot theme and colors
+theme_set(theme_classic(base_size = 18))
+
+## fix print width for knitted doc
+options(width = 70)
+
+## suppress warnings about grouping 
+options(dplyr.summarise.inform = F)
+options(xtable.floating = F)
+options(xtable.timestamp = "")
+
+## set random seed
+set.seed(1)
+
+```
+
+# Data Cleaning
+
+```{r}
+
+# Import data with participant info
+df.raw =
+  read.csv("psych_139_mini_project_1_split_80_responses.csv")
+
+```
+
+# Phase 1
+
+## Examine the Data
+
+```{r}
+
+skimr::skim(df.raw)
+
+```
+
+## Data Wrangling
+
+```{r}
+
+# convert to wide format so each row represents one participant (N = 426)
+
+df.wide =
+  df.raw %>%
+  pivot_wider(id_cols = "participant_id",
+              names_from = c("question_text"),
+              values_from = c("correct_response"),
+              values_fn = mean)
+
+```
+
+## Prelim Item Difficulty Analysis
+
+```{r}
+
+skimr::skim(df.wide)
+
+# Look at proportion of participants who responded correctly
+df.wide_summary =
+  df.raw %>%
+  group_by(question_text, test_name, graph_type, task_type_merged) %>%
+  dplyr::summarise(mean_correct = mean(correct_response,
+                                       na.rm = T),
+            sd_correct = sd(correct_response,
+                            na.rm = T),
+            n = n(),
+            se_correct = sd_correct/sqrt(n),) %>%
+  ungroup()
+
+```
+
+### Plot Single Items
+
+```{r fig.width = 20, fig.height = 10}
+
+df.wide_summary %>%
+  ggplot(aes(x = reorder(question_text, mean_correct),
+             y = mean_correct*100),
+         color = graph_type) +
+  geom_errorbar(
+    aes(ymin = (mean_correct - se_correct)*100,
+        ymax = (mean_correct + se_correct)*100),
+    width = 2,
+    color = "black",
+    alpha = .7,
+    size = 1) +
+  geom_point(aes(fill = graph_type),
+             shape = 21, color = "black", size = 2) +
+  facet_wrap(~ task_type_merged + test_name,
+             ncol = 5, scales = "free_y") +
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1,
+                                   size = 1),
+        legend.position = "none") +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25)) +
+  labs(title = "Item Difficulty by Task Type & Test",
+       x = "Question",
+       y = "% correct")
+
+```
+
+### Plot Averages by Task Type
+
+```{r}
+
+df.task_summary_tasktype =
+  df.raw %>%
+  group_by(test_name, task_type_merged) %>%
+  summarise(mean_correct = mean(correct_response, na.rm = T),
+            sd_correct = sd(correct_response, na.rm = T),
+            n = n(),
+            se_correct = sd_correct / sqrt(n))
+
+```
+
+```{r fig.width = 10, fig.height = 6}
+
+df.task_summary_tasktype %>%
+  ggplot(aes(x = test_name,
+             y = (mean_correct*100),
+             fill = test_name,
+             color = test_name)) +
+  geom_errorbar(aes(ymin = (mean_correct - se_correct)*100,
+              ymax = (mean_correct + se_correct)*100),
+          position = position_dodge(width = 0.9),
+          width = 0.1,
+          color = "black") +
+  geom_point(position = position_dodge(width = 0.9),
+             width = 1,
+             size = 3) +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  labs(title = "% correct averaged across Task Type",
+       x = "Task Type",
+       y = "% correct",
+       fill = "Test") +
+  theme_minimal(base_size = 18) +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "bottom") +
+  guides(fill = "none") +
+  facet_grid(~task_type_merged)
+
+```
+
+## Single-item descriptives for % correct
+
+```{r}
+
+## Averages, SDs, mins and maxes
+df.wide_summary %>%
+  dplyr::select(mean_correct, sd_correct) %>%
+  summary()
+
+# Lowest average performance
+df.wide_summary %>%
+  dplyr::select(question_text, mean_correct, sd_correct) %>%
+  arrange(desc(mean_correct)) %>%
+  tail(n = 10)
+
+# Highest average performance
+df.wide_summary %>%
+  dplyr::select(question_text, mean_correct, sd_correct) %>%
+  arrange(desc(mean_correct)) %>%
+  head(n = 10)
+
+# Least variability
+df.wide_summary %>%
+  dplyr::select(question_text, mean_correct, sd_correct) %>%
+  arrange(desc(sd_correct)) %>%
+  tail(n = 10)
+
+# Most variability
+df.wide_summary %>%
+  dplyr::select(question_text, mean_correct, sd_correct) %>%
+  arrange(desc(sd_correct)) %>%
+  head(n = 10)
+
+```
+
+## Phase 2: Defining & evaluating statistical models
+
+### Question 1: Are items that were designed to misleader harder than those that were not? (I.e., does misleading nature predict item difficulty as per % correct?)
+
+H1: For CALVI, misleading items are lower % correct (higher difficulty) than
+non-misleading items.
+
+```{r}
+
+# Extract relevant subset of data
+df.misleading =
+  df.raw %>%
+  # Keep only relevant cols
+  dplyr::select(participant_id, question_text, test_name, graph_type, task_type_merged, correct_response, misleading_item) %>%
+  # Keep only CALVI data
+  filter(test_name == "CALVI") %>%
+  # Convert into factor
+  mutate(misleading_item = factor(misleading_item))
+
+```
+
+```{r}
+
+# count misleading items
+df.misleading %>%
+  distinct(question_text, misleading_item) %>%
+  count(misleading_item)
+
+```
+
+```{r fig.width = 16, fig.height = 8}
+
+# Plot the raw data
+df.misleading %>%
+  ggplot(aes(x = misleading_item,
+             y = (correct_response*100),
+             fill = misleading_item)) +
+    geom_point(position = position_jitter(width = .3,
+                                          height = 0),
+               shape = 21,
+               size = 2,
+               alpha = .3) +
+  stat_summary(fun.data = "mean_cl_boot",
+               geom = "pointrange",
+               color = "black",
+               shape = 21,
+               size = 1,
+               linewidth = 3) +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  scale_fill_brewer(palette = "Pastel2") +
+  labs(title = "% correct by misleading vs. non-misleading items",
+       x = "Misleading Item",
+       y = "% correct",
+       fill = "Misleading?") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "none")
+  
+```
+
+```{r}
+
+# Run empty model
+model.misleading_empty =
+  lm(correct_response ~ 1,
+      data = df.misleading)
+
+# Run augmented model with additional predictor
+model.misleading_augmented =
+  lm(correct_response ~ 1 + misleading_item,
+      data = df.misleading)
+
+# Compare two models
+anova(model.misleading_empty, model.misleading_augmented)
+
+# Print regression output
+model.misleading_augmented %>%
+  summary()
+
+model.misleading_augmented %>%
+  joint_tests()
+
+# Show estimates of augmented model
+model.misleading_augmented %>%
+  ggpredict()
+
+model.misleading_augmented %>% 
+  glance()
+
+# calculate RMSE
+rmse_misleading =
+  model.misleading_augmented %>% 
+  rmse(data = df.misleading)
+
+```
+
+```{r fig.width = 16, fig.height = 8}
+
+# plot the data with empty model prediction
+df.misleading %>%
+  ggplot(aes(x = misleading_item,
+             y = (correct_response*100),
+             fill = misleading_item)) +
+    geom_point(position = position_jitter(width = .3,
+                                          height = 0),
+               shape = 21,
+               size = 2,
+               alpha = .3) +
+  stat_summary(fun.data = "mean_cl_boot",
+               geom = "pointrange",
+               color = "black",
+               shape = 21,
+               size = 1,
+               linewidth = 3) +
+  geom_hline(yintercept = mean(df.misleading$correct_response)*100,
+           color = "lightblue", size = 3) +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  scale_fill_brewer(palette = "Pastel2") +
+  labs(title = "% correct by misleading vs. non-misleading items",
+       x = "Misleading Item",
+       y = "% correct",
+       fill = "Misleading?") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "none")
+
+```
+
+```{r fig.width = 16, fig.height = 8}
+
+# plot the data with empty model prediction
+df.misleading %>%
+  ggplot(aes(x = misleading_item,
+             y = (correct_response*100),
+             fill = misleading_item)) +
+    geom_point(position = position_jitter(width = .3,
+                                          height = 0),
+               shape = 21,
+               size = 2,
+               alpha = .3) +
+  stat_summary(fun.data = "mean_cl_boot",
+               geom = "pointrange",
+               color = "black",
+               shape = 21,
+               size = 1,
+               linewidth = 3) +
+  geom_hline(yintercept = mean(df.misleading$correct_response[df.misleading$misleading_item=="True"])*100,
+           color = "orange", size = 3) +
+    geom_hline(yintercept = mean(df.misleading$correct_response[df.misleading$misleading_item=="False"])*100,
+           color = "lightgreen", size = 3) +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  scale_fill_brewer(palette = "Pastel2") +
+  labs(title = "% correct by misleading vs. non-misleading items",
+       x = "Misleading Item",
+       y = "% correct",
+       fill = "Misleading?") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "none")
+
+```
+
+### Question 2: Does question length predict item difficulty?
+
+H1: Longer questions show lower % correct (higher difficulty) than shorter questions.
+
+(independent of test)
+
+```{r}
+
+# Extract relevant subset of data
+df.length =
+  df.raw %>%
+  # Keep only relevant cols
+  dplyr::select(participant_id, test_name, graph_type, task_type_merged, correct_response, question_text) %>%
+  # Convert into numerical variable
+  mutate(question_length = nchar(question_text))
+
+# create summary df
+df.length_summary =
+  df.length %>%
+  dplyr::select(question_text, correct_response) %>%
+  group_by(question_text) %>%
+  summarise(
+    percent_correct = mean(correct_response, na.rm = TRUE) * 100,
+    n = n(),
+    question_length = nchar(first(question_text))
+  ) %>%
+  ungroup()
+  # %>%
+  # filter(question_length < 375)
+
+```
+
+```{r}
+
+# Plot the raw data
+df.length_summary %>%
+  ggplot(aes(x = question_length,
+             y = percent_correct)) +
+    geom_point(position = position_jitter(width = .5,
+                                          height = 0),
+               size = 2,
+               alpha = .3) +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  xlim(0, 375) +
+  labs(y = "% correct",
+       x = "Question Length")
+
+```
+
+```{r}
+
+# plot empty model with mean
+df.length_summary %>%
+  ggplot(aes(x = question_length,
+             y = percent_correct)) +
+    geom_point(position = position_jitter(width = .5,
+                                          height = 0),
+               size = 2,
+               alpha = .6) +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  geom_hline(yintercept = mean(df.length_summary$percent_correct),
+             color = "lightblue", size = 1) +
+  xlim(0, 375) +
+  labs(y = "% correct",
+       x = "Question Length")
+
+```
+
+```{r}
+
+# Run empty model
+model.length_empty =
+  lm(percent_correct ~ 1,
+      data = df.length_summary)
+
+# Run augmented model with additional predictor
+model.length_augmented =
+  lm(percent_correct ~ 1 + question_length,
+      data = df.length_summary)
+
+# Compare two models
+anova(model.length_empty, model.length_augmented)
+
+# Print regression output
+model.length_augmented %>%
+  summary()
+
+model.length_augmented %>%
+  joint_tests()
+
+model.length_augmented %>% 
+  glance()
+
+# calculate RMSE
+rmse_length =
+  model.length_augmented %>% 
+  rmse(data = df.length_summary)
+
+```
+
+```{r}
+
+df.length_summary %>%
+  ggplot(aes(x = question_length,
+             y = percent_correct)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "lightblue") +
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  labs(title = "% correct by question length",
+       x = "Question Length",
+       y = "% correct")
+
+```
+
+## Item Discrimination and Item Information
+
+```{r}
+
+df.irt =
+  df.raw
+
+```
+
+### WAN
+
+```{r}
+
+# Run for WAN
+df.irt_wide = 
+  df.irt %>%
+  filter(test_name == "WAN") %>%
+  dplyr::select(participant_id, item_id, correct_response) %>%
+  pivot_wider(names_from = item_id,
+              values_from = correct_response) %>%
+  dplyr::select(-c(participant_id))
+
+model.2pl =
+  ltm(df.irt_wide ~ z1,
+      IRT.param = TRUE, control = list(iter.em = 1000))
+
+# item discrimination
+plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4))
+
+# item information
+plot(model.2pl,
+     type = "IIC", zrange = c(-4, 4))
+
+# Wright map
+fit_2pl_tam =
+  tam.mml.2pl(df.irt_wide)
+
+IRT.WrightMap(fit_2pl_tam)
+
+```
+
+### GGR
+
+```{r}
+
+# Run for GGR
+df.irt_wide = 
+  df.irt %>%
+  filter(test_name == "GGR") %>%
+  dplyr::select(participant_id, item_id, correct_response) %>%
+  pivot_wider(names_from = item_id,
+              values_from = correct_response) %>%
+  dplyr::select(-c(participant_id))
+
+# fit 2 parameter model
+model.2pl =
+  ltm(df.irt_wide ~ z1,
+      IRT.param = TRUE, control = list(iter.em = 1000))
+
+# item discrimination
+plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4))
+
+# item information
+plot(model.2pl,
+     type = "IIC", zrange = c(-4, 4))
+
+# Wright map
+fit_2pl_tam =
+  tam.mml.2pl(df.irt_wide)
+
+IRT.WrightMap(fit_2pl_tam)
+
+```
+
+### BRBF
+
+```{r}
+
+# Run for BRBF
+df.irt_wide = 
+  df.irt %>%
+  filter(test_name == "BRBF") %>%
+  dplyr::select(participant_id, item_id, correct_response) %>%
+  pivot_wider(names_from = item_id,
+              values_from = correct_response) %>%
+  dplyr::select(-c(participant_id))
+
+# fit 2 parameter model
+model.2pl =
+  ltm(df.irt_wide ~ z1,
+      IRT.param = TRUE, control = list(iter.em = 1000))
+
+# item discrimination
+plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4))
+
+# item information
+plot(model.2pl,
+     type = "IIC", zrange = c(-4, 4))
+
+# Wright map
+fit_2pl_tam =
+  tam.mml.2pl(df.irt_wide)
+
+IRT.WrightMap(fit_2pl_tam)
+
+```
+
+### VLAT
+
+```{r}
+
+# Run for VLAT
+df.irt_wide = 
+  df.irt %>%
+  filter(test_name == "VLAT") %>%
+  dplyr::select(participant_id, item_id, correct_response) %>%
+  pivot_wider(names_from = item_id,
+              values_from = correct_response) %>%
+  dplyr::select(-c(participant_id))
+
+# fit 2 parameter model
+model.2pl =
+  ltm(df.irt_wide ~ z1,
+      IRT.param = TRUE, control = list(iter.em = 1000))
+
+# item discrimination
+plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4))
+
+# item information
+plot(model.2pl,
+     type = "IIC", zrange = c(-4, 4))
+
+# Wright map
+fit_2pl_tam =
+  tam.mml.2pl(df.irt_wide)
+
+IRT.WrightMap(fit_2pl_tam)
+
+```
+
+### CALVI
+
+```{r}
+
+# Run for VLAT
+df.irt_wide = 
+  df.irt %>%
+  filter(test_name == "CALVI") %>%
+  dplyr::select(participant_id, item_id, correct_response) %>%
+  pivot_wider(names_from = item_id,
+              values_from = correct_response) %>%
+  dplyr::select(-c(participant_id))
+
+# fit 2 parameter model
+model.2pl =
+  ltm(df.irt_wide ~ z1,
+      IRT.param = TRUE, control = list(iter.em = 1000))
+
+# item discrimination
+plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4))
+
+# item information
+plot(model.2pl,
+     type = "IIC", zrange = c(-4, 4))
+
+# Wright map
+fit_2pl_tam =
+  tam.mml.2pl(df.irt_wide)
+
+IRT.WrightMap(fit_2pl_tam)
+
+```
+
+## Simulate a guessing participant
+
+```{r}
+
+# define dataset
+df.irt_wide = 
+  df.irt %>%
+  dplyr::select(participant_id, item_id, correct_response) %>%
+  pivot_wider(names_from = item_id,
+              values_from = correct_response) %>%
+  dplyr::select(-c(participant_id))
+
+```
+
+```{r}
+
+# add column with binary vs MC information
+df.binaryvsmc =
+  df.irt %>% 
+  dplyr::select(item_id, possible_responses, correct_response) %>% 
+  distinct() %>%
+  # count the response options for each item
+  mutate(n_options = str_count(possible_responses, ",") + 1,
+         item_type = if_else(n_options == 2, "binary", "mc"))
+
+binary_items =
+  df.binaryvsmc %>%
+  filter(item_type == "binary") %>%
+  pull(item_id)
+
+mc_items =
+  df.binaryvsmc %>%
+  filter(item_type == "mc") %>%
+  pull(item_id)
+
+```
+
+```{r}
+
+# predictions for binary items
+model.2pl =
+  ltm(df.irt_wide ~ z1,
+      IRT.param = TRUE, control = list(iter.em = 1000))
+
+pars = coef(model.2pl)
+logistic =
+  function(theta, a, b) 1 / (1 + exp(-a * (theta - b)))
+
+# define data viz literacy as 1 SD below the mean
+theta = -1
+
+# get discrimination and difficulty
+P_binary =
+  logistic(theta,
+           pars[binary_items, "Dscrmn"],
+           pars[binary_items, "Dffclt"])
+
+# generate prediction for each item
+pred_binary =
+  tibble(
+    item_id = names(P_binary),
+    proportion_correct = round(100 * P_binary, 2)
+    )
+
+```
+
+```{r}
+
+# predictions for MC items
+
+# define parameters
+theta = .5 # chance the simulated student eliminates a given response option
+elim_prop  = .75 # student eliminates max 75 % of wrong options
+n_sim = 426 # we simulate N = 426 respondents
+
+# define function to get prediction for each MC item
+get_mc_pred =
+  function(opts_string, n_sim, theta, elim_prop) {
+    # count number of answer choices
+    n_options = str_count(opts_string, ",") + 1
+    # define number of wrong options as number of options minus 1
+    k_wrong = n_options - 1
+    if (k_wrong == 0) return(1)
+    # set dynamic maximum of eliminated options (≥ 50% of options)
+    max_elim = floor(elim_prop * k_wrong)
+    # chance the student successfully eliminates any single wrong option based on parameters above
+    n_elim = pmin(rbinom(n_sim, k_wrong, theta), max_elim)
+    # remaining wrong options is number as wrong options minus eliminated options
+    remain_wrong = k_wrong - n_elim
+    # calculate expected probability of dplyr::selecting correct response
+    mean(1 / (remain_wrong + 1))
+  }
+
+pred_mc =
+  df.binaryvsmc %>% 
+  filter(item_type == "mc") %>% 
+  distinct(item_id, possible_responses) %>%
+  mutate(
+    proportion_correct = round(
+      100 * map_dbl(
+        possible_responses,
+        ~ get_mc_pred(.x,
+                      n_sim = n_sim,
+                      theta = theta,
+                      elim_prop = elim_prop)
+        ), 2) # round to two digits
+  ) %>% 
+  dplyr::select(item_id, proportion_correct)
+
+```
+
+```{r}
+
+# merge datasets
+prediction_final =
+  bind_rows(
+    pred_binary %>%
+      mutate(item_id = as.numeric(item_id)),
+    pred_mc %>%
+      mutate(item_id = as.numeric(item_id))
+    ) %>% 
+  arrange(item_id)
+
+```
+
+```{r}
+
+# create dataset with observed % correct values per item
+observed_final =
+  df.irt %>%
+  group_by(item_id) %>% 
+  summarise(actual_prop = 100 * mean(correct_response, na.rm = TRUE),
+            test_name   = first(test_name),
+            .groups = "drop") %>% 
+  mutate(item_id = as.numeric(item_id))
+
+# create new dataset merging with predictions
+results =
+  prediction_final %>% 
+  rename(predicted_prop = proportion_correct) %>% 
+  left_join(observed_final, by = "item_id")
+
+```
+
+```{r fig.width = 10, fig.height = 6}
+
+correlation = cor.test(results$predicted_prop, results$actual_prop)
+
+# plot
+results %>%
+  ggplot(aes(x = predicted_prop,
+             y = actual_prop,
+             color = test_name)) +
+  geom_point(alpha = 0.5, size = 2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed",
+              color = "darkblue", size = 1) +
+  scale_color_brewer(palette = "Set1", name = "Test") +
+  labs(
+    title  = "Predicted vs. Observed Item Difficulty (measured as % correct)",
+    subtitle = "Individual dots represent individual test items",
+    x = "Predicted % correct ('low-literacy guessing student' model)",
+    y = "Observed % correct (N = 426 subjects)"
+  )
+
+```
+
+```{r}
+
+# Calculate RMSE
+# RMSE of fitting the mean
+baseline_rmse =
+  sqrt(mean((results$actual_prop - mean(results$actual_prop))^2))
+
+print(baseline_rmse)
+
+# RMSE of model
+rmse =
+  sqrt(mean((results$predicted_prop - results$actual_prop)^2,
+            na.rm = TRUE))
+
+print(rmse)
+
+cat("Baseline RMSE =", round(baseline_rmse, 1),"%\n",
+    "Model   RMSE =", round(rmse, 1),"%\n")
+
+```
+
+## Predicting Held Out Data
+
+```{r}
+
+# Import held out data with participant info
+df.heldout =
+  read.csv("test_data.csv")
+
+# add column with binary vs MC information
+df.heldout_binaryvsmc =
+  df.heldout %>% 
+  dplyr::select(item_id, possible_responses) %>% 
+  distinct() %>%
+  # count the response options for each item
+  mutate(n_options = str_count(possible_responses, ",") + 1,
+         item_type = if_else(n_options == 2, "binary", "mc"))
+
+binary_items =
+  df.heldout_binaryvsmc %>%
+  filter(item_type == "binary") %>%
+  pull(item_id)
+
+mc_items =
+  df.heldout_binaryvsmc %>%
+  filter(item_type == "mc") %>%
+  pull(item_id)
+
+```
+
+```{r}
+
+# run predictions for binary items
+theta = -1
+
+P_binary =
+  logistic(theta,
+           pars[binary_items, "Dscrmn"],
+           pars[binary_items, "Dffclt"])
+
+pred_binary_heldout =
+  tibble(
+    item_id = binary_items,
+    predicted_prop = round(100 * P_binary, 2)
+)
+
+```
+
+```{r}
+
+# run predictions for MC items
+# define parameters
+theta = .5 # chance the simulated student eliminates a given response option
+elim_prop  = .75 # student eliminates max 75 % of wrong options
+n_sim = 426 # we simulate N = 426 respondents
+
+# define function to get prediction for each MC item
+get_mc_pred =
+  function(opts_string, n_sim, theta, elim_prop) {
+    # count number of answer choices
+    n_options = str_count(opts_string, ",") + 1
+    # define number of wrong options as number of options minus 1
+    k_wrong = n_options - 1
+    if (k_wrong == 0) return(1)
+    # set dynamic maximum of eliminated options (≥ 50% of options)
+    max_elim = floor(elim_prop * k_wrong)
+    # chance the student successfully eliminates any single wrong option based on parameters above
+    n_elim = pmin(rbinom(n_sim, k_wrong, theta), max_elim)
+    # remaining wrong options is number as wrong options minus eliminated options
+    remain_wrong = k_wrong - n_elim
+    # calculate expected probability of dplyr::selecting correct response
+    mean(1 / (remain_wrong + 1))
+  }
+
+pred_mc_heldout =
+  df.heldout_binaryvsmc %>% 
+  filter(item_type == "mc") %>% 
+  distinct(item_id, possible_responses) %>%
+  mutate(
+    predicted_prop = round(
+      100 * map_dbl(
+        possible_responses,
+        ~ get_mc_pred(.x,
+                      n_sim = n_sim,
+                      theta = theta,
+                      elim_prop = elim_prop)
+        ), 2) # round to two digits
+  ) %>% 
+  dplyr::select(item_id, predicted_prop)
+
+```
+
+```{r}
+
+# merge datasets
+export =
+  bind_rows(
+    pred_binary_heldout,
+    pred_mc_heldout) %>% 
+  mutate(predicted_prop = predicted_prop / 100) %>%
+  rename(proportion_correct = predicted_prop) %>%
+  arrange(item_id)
+
+# export predictions
+readr::write_csv(export, "predictions.csv")
+
+```

@@ -1,0 +1,6 @@
+"0",""
+"0","# Least variability"
+"0","df.wide_summary %>%"
+"0","  select(question_text, mean_correct, sd_correct) %>%"
+"0","  arrange(desc(sd_correct)) %>%"
+"0","  tail(n = 10)"
