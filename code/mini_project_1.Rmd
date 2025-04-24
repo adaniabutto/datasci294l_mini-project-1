@@ -52,6 +52,10 @@ options(xtable.timestamp = "")
 ## set random seed
 set.seed(1)
 
+## set directories for plots and data outputs
+figures_dir = '../figures/'
+data_dir = '../data/'
+
 ```
 
 # Data Cleaning
