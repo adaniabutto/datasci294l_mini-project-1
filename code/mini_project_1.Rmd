@@ -97,8 +97,8 @@ head(df.wide, n = 10)
 
 ## Preliminary Item Difficulty Analysis: % correct
 
-Across all tests, we have a total of 184 questions, with about 80-90 responses per
-question.
+Across all tests, we have a total of 184 items (150 questions), with about 80-90 responses
+per item.
 
 ```{r}
 
