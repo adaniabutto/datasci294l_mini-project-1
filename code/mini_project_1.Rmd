@@ -28,10 +28,12 @@ library(grid)
 library(DT)            # for data tables
 library(tidyverse)     # for everything else
 library(ggeffects)     # for regression outputs
+library(broom.mixed)
 library(emmeans)
 library(generics)
 library(broom)
 library(modelr)
+library(lme4)          # for mixed effects models
 library(ltm)           # for IRT stuff
 library(TAM)
 library(psych)
@@ -304,8 +306,8 @@ That is, does misleading nature (categorical; yes vs. no) predict % correct?
 **Prediction:** Misleading items are lower % correct (i.e., higher difficulty) than
 non-misleading items.
 
-**Method:** Simple regression: $y = b_0 + x*b_1$, where $y$ = % correct and $x$ =
-misleading nature (0 or 1).
+**Method:** Mixed effects logistic regression, with a fixed effect for item nature and a
+random intercept per participant.
 
 ```{r}
 
@@ -396,23 +398,29 @@ ggsave((paste0(figures_dir,
   
 ```
 
-### Regression Analysis: % correct \~ misleading
+### Model A: Mixed Effects Logistic Regression: % correct \~ misleading
 
-The regression analysis shows that compared to a minimal model that fits the mean
-regardless of the difference in the nature of the items (misleading vs not misleading),
-the model including misleading nature as a predictor of % correct reduces the error by
-\~10%. Misleading nature is a weak predictor.
+The logistic regression analysis shows that compared to a minimal model that fits the mean
+regardless of item nature (misleading vs. not misleading), the model including item nature
+improved fit to data:
 
-*F*(1, 4080) = 431.54, p \< .001, $R^2$ = .095.
+$χ^2$ = 356.6, df = 1, β = -1.51, SE = .080, *p* \< .001; *RMSE_model* = .463 vs
+*RMSE_baseline **=*** 0*.*496.
 
-*RMSE_model* = 0.472 vs *RMSE_baseline **=** .*496 (scale: percentage points in decimal
-format, 0-1)
+Predicted % correct for non-misleading items was about twice as large (70%; 95% CIs =
+[.67, .73]) as % correct for misleading items (34%; 95% CIs = [.32, .36]).
 
 ```{r}
 
+df.misleading =
+  df.misleading %>%
+  mutate(participant_id = factor(participant_id))
+
 # Run empty model fitting the mean
 model.misleading_empty =
-  lm(correct_response ~ 1,
+  glm(correct_response ~
+          # intercept
+          1,
       data = df.misleading)
 
 model.misleading_empty %>%
@@ -420,8 +428,14 @@ model.misleading_empty %>%
 
 # RMSE
 rmse_empty =
-  model.misleading_empty %>% 
-  rmse(data = df.misleading)
+  # square root
+  sqrt(
+    # take mean
+    mean((df.misleading$correct_response -
+            predict(model.misleading_empty, type = "response"))^2
+         # errors squared
+         )
+    )
 
 print(rmse_empty)
 
@@ -429,8 +443,15 @@ print(rmse_empty)
 
 # Run augmented model adding predictor of interest (misleading nature)
 model.misleading_augmented =
-  lm(correct_response ~ 1 + misleading_item,
-      data = df.misleading)
+  glmer(correct_response ~
+        # intercept
+        1 +
+        # fixed effect for item nature
+        misleading_item +
+        # random intercept for participant
+        (1 | participant_id),
+      data = df.misleading,
+      family = "binomial")
 
 # Print regression output
 model.misleading_augmented %>%
@@ -445,12 +466,18 @@ model.misleading_augmented %>%
 
 # Calculate model statistics
 model.misleading_augmented %>% 
-  glance()
+  broom.mixed::glance()
 
 # Compute RMSE
 rmse_misleading =
-  model.misleading_augmented %>% 
-  rmse(data = df.misleading)
+  # square root
+  sqrt(
+    # take mean
+    mean((df.misleading$correct_response -
+            predict(model.misleading_augmented, type = "response"))^2
+         # errors squared
+         )
+    )
 
 print(rmse_misleading)
 
@@ -559,8 +586,8 @@ defined question length as the number of characters in the question.
 **Prediction:** Longer questions are lower % correct (i.e., higher difficulty) than short
 questions.
 
-**Method:** Simple regression: $y = b_0 + x*b_1$, where $y$ = % correct and $x$ = question
-length.
+**Method:** Mixed effects linear regression, with a fixed effect for question length and a
+random intercept per participant.
 
 ```{r}
 
@@ -631,31 +658,45 @@ df.length_summary %>%
 
 ```
 
-### Regression Analysis: % correct \~ question length
+### Model B: Mixed Effects Linear Regression Analysis: % correct \~ question length
 
 The regression analysis shows that compared to a minimal model that fits the mean
-regardless of the difference in question length, the model including question length as a
-predictor of % correct reduces the error by \~4%. Question length is a weak predictor.
+regardless of question length, the model including question length improved fit to data:
 
-*F*(1, 148) = 6.992, *p* = .009, $R^2$ = .039.
+$χ^2$ = 430, df = 1, β standardized = -.37, SE = .0001, *p* \< .001; *RMSE_model* = .459
+vs *RMSE_baseline **=*** 0*.*483.
 
-*RMSE_model* = 26.84 vs *RMSE_baseline **=*** 27.46 (scale: whole percentage points,
-0-100)
+On average, for every unit increase in question length (1 unit = 1 SD; standardized), %
+correct was predicted to increase by .2%.
 
 ```{r}
 
+df.length =
+  df.length %>%
+  mutate(participant_id = factor(participant_id),
+         question_length = scale(question_length,
+                                 center = T, scale = T))
+
 # Run empty model fitting the mean
 model.length_empty =
-  lm(percent_correct ~ 1,
-      data = df.length_summary)
+  glm(correct_response ~
+        # intercept
+        1,
+      data = df.length)
 
 model.length_empty %>%
   summary()
 
 # RMSE
 rmse_empty =
-  model.length_empty %>% 
-  rmse(data = df.length_summary)
+  # square root
+  sqrt(
+    # take mean
+    mean((df.length$correct_response -
+            predict(model.length_empty, type = "response"))^2
+         # errors squared
+         )
+    )
 
 print(rmse_empty)
 
@@ -663,30 +704,42 @@ print(rmse_empty)
 
 # Run augmented model adding predictor of interest (question length)
 model.length_augmented =
-  lm(percent_correct ~ 1 + question_length,
-      data = df.length_summary)
+  glmer(correct_response ~
+          # intercept
+          1 +
+          # fixed effect for question length
+          question_length +
+          # random intercept for question
+          (1 | participant_id),
+        family = "binomial",
+        data = df.length)
 
 # Print regression output
 model.length_augmented %>%
   summary()
 
 model.length_augmented %>%
-  joint_tests()
+  joint_tests(pbkrtest.limit = 15616)
 
 # Calculate model statistics
 model.length_augmented %>% 
-  glance()
+  broom.mixed::glance()
 
 # Compute RMSE
 rmse_questionlength =
-  model.length_augmented %>% 
-  rmse(data = df.length_summary)
+  # square root
+  sqrt(
+    # take mean
+    mean((df.length$correct_response -
+            predict(model.length_augmented, type = "response"))^2
+         # errors squared
+         )
+    )
 
 print(rmse_questionlength)
 
 # Compare empty model with augmented model
 anova(model.length_empty, model.length_augmented)
-
 
 ```
 
@@ -695,26 +748,21 @@ anova(model.length_empty, model.length_augmented)
 ```{r}
 
 # plot empty model with mean
-df.length_summary %>%
+df.length %>%
   # x-axis = question length
   ggplot(aes(x = question_length,
              # y-axis = % correct
-             y = percent_correct)) +
+             y = correct_response)) +
   # plot raw data points
   geom_point(position = position_jitter(width = .5,
                                         height = 0),
              size = 2,
              alpha = .5) +
-  # adjust scale
-  scale_y_continuous(limits = c(0, 100),
-                     breaks = seq(0, 100, 25),
-                     labels = scales::percent_format(scale = 1)) +
   # add fitted line for mean
-  geom_hline(yintercept = mean(df.length_summary$percent_correct),
+  geom_hline(yintercept = mean(df.length$correct_response),
              color = "lightblue", size = 1) +
-  xlim(0, 375) +
   # adjust axis labels
-  labs(y = "% correct",
+  labs(y = "Correct (y = 1, n = 0)",
        x = "Question Length")
 
 ```
@@ -722,23 +770,73 @@ df.length_summary %>%
 ```{r}
 
 # plot the data with a fitted line for the augmented model predictions
-df.length_summary %>%
+df.length %>%
   # question length on x-axis
   ggplot(aes(x = question_length,
              # % correct on y-axis
-             y = percent_correct)) +
+             y = correct_response)) +
   # add raw data
   geom_point(alpha = 0.6, size = 2) +
   # add regression line
   geom_smooth(method = "lm", se = TRUE, color = "lightblue") +
-  # adjuts scale
-  scale_y_continuous(limits = c(0, 100),
-                     breaks = seq(0, 100, 25),
-                     labels = scales::percent_format(scale = 1)) +
   # add title and axis labels
   labs(title = "% correct by question length",
        x = "Question Length",
-       y = "% correct")
+       y = "Correct (y = 1, n = 0)")
+
+```
+
+## Comparing Model A and Model B
+
+We have to reduce the data set used for model A to just CALVI items in order to match the
+trial-level data that is fed into the model.
+
+```{r}
+
+# Create new data sets to match trial-level data fed into model
+df.comparison_model =
+  df.raw %>%
+  # Keep only relevant cols
+  dplyr::select(participant_id, question_text, test_name, graph_type, task_type_merged, correct_response, misleading_item) %>%
+  # Filter for CALVI data
+  filter(test_name == "CALVI") %>%
+  # Convert "misleading nature" into factor (True vs false)
+  mutate(misleading_item = factor(misleading_item)) %>%
+  # calculate question length
+  mutate(question_length = nchar(question_text)) %>%
+  # format relevant variables
+  mutate(participant_id = factor(participant_id),
+       question_length = scale(question_length,
+                               center = T, scale = T))
+
+# Fit models anew
+
+# Model A
+model.comparison.misleading =
+  glmer(correct_response ~
+          # intercept
+          1 +
+          # fixed effect for question length
+          misleading_item +
+          # random intercept for question
+          (1 | participant_id),
+        family = "binomial",
+        data = df.comparison_model)
+
+# Model B
+model.comparison.length =
+  glmer(correct_response ~
+          # intercept
+          1 +
+          # fixed effect for question length
+          question_length +
+          # random intercept for question
+          (1 | participant_id),
+        family = "binomial",
+        data = df.comparison_model)
+
+# Compare model A with model B
+anova(model.comparison.misleading, model.comparison.length)
 
 ```
 
