@@ -1227,7 +1227,7 @@ get_mc_pred =
     n_elim = pmin(rbinom(n_sim, k_wrong, theta), max_elim)
     # define the remaining wrong options as the number of wrong options minus eliminated options
     remain_wrong = k_wrong - n_elim
-    # calculate expected probability of dplyr::selecting correct response
+    # calculate expected probability of selecting correct response
     mean(1 / (remain_wrong + 1))
   }
 
