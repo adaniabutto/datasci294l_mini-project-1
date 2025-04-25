@@ -1,5 +1,6 @@
 ---
-title: "Mini-Project 1"
+title: "DATSCI294L: Data Science and the Science of Learning"
+subtitle: "Mini-Project #1: Predicting the diffi culty of a test item"
 author: "Adani B. Abutto"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 
@@ -58,22 +59,19 @@ data_dir = '../data/'
 
 ```
 
-# Data Cleaning
+# Phase 1: Exploring and visualizing the data
+
+## Load and examine the data
 
 ```{r}
 
-# Import data with participant info
+# Import data as downloaded from https://data-visualization-benchmark.s3.us-west-2.amazonaws.com/vt-fusion/psych_139_mini_project_1_split_80_responses.csv
+
 df.raw =
-  read.csv(paste0(data_dir, "psych_139_mini_project_1_split_80_responses.csv"))
+  read.csv(paste0(data_dir,
+                  "psych_139_mini_project_1_split_80_responses.csv"))
 
-```
-
-# Phase 1
-
-## Examine the Data
-
-```{r}
-
+# run quick data summary
 skimr::skim(df.raw)
 
 ```
@@ -82,154 +80,232 @@ skimr::skim(df.raw)
 
 ```{r}
 
-# convert to wide format so each row represents one participant (N = 426)
+# convert data to wide format so each row represents one participant (N = 426)
 
 df.wide =
   df.raw %>%
+  # grab response values for each question from "correct_response" col
   pivot_wider(id_cols = "participant_id",
               names_from = c("question_text"),
               values_from = c("correct_response"),
               values_fn = mean)
 
+# print top rows
+head(df.wide, n = 10)
+
 ```
 
-## Prelim Item Difficulty Analysis
+## Preliminary Item Difficulty Analysis: % correct
+
+Across all tests, we have a total of 184 questions, with about 80-90 responses per
+question.
 
 ```{r}
 
-skimr::skim(df.wide)
+# Create summary df: For each question, compute % of participants who responded correctly (mean), SD, and SE
 
-# Look at proportion of participants who responded correctly
 df.wide_summary =
   df.raw %>%
   group_by(question_text, test_name, graph_type, task_type_merged) %>%
+  # compute mean
   dplyr::summarise(mean_correct = mean(correct_response,
                                        na.rm = T),
-            sd_correct = sd(correct_response,
-                            na.rm = T),
-            n = n(),
-            se_correct = sd_correct/sqrt(n),) %>%
+                   # compute SD
+                   sd_correct = sd(correct_response,
+                                   na.rm = T),
+                   # compute number of responses
+                   n = n(),
+                   # compute SE (SD / sqrt of n)
+                   (1.96*se_correct) = sd_correct/sqrt(n),) %>%
   ungroup()
+
+# print top rows
+head(df.wide_summary, n = 10)
 
 ```
 
-### Plot Single Items
+### Viz 1: % correct for single items
+
+The plot below shows that as expected, even within a single test, the items varied
+considerably in their difficulty (as measured by % correct).
 
 ```{r fig.width = 20, fig.height = 10}
 
 df.wide_summary %>%
+  # question on x-axis, ordered by % correct
   ggplot(aes(x = reorder(question_text, mean_correct),
+             # % correct on y-axis
              y = mean_correct*100),
+         # color each bar based on graph type
          color = graph_type) +
+  # add CIs based on 1.96*SE
   geom_errorbar(
-    aes(ymin = (mean_correct - se_correct)*100,
-        ymax = (mean_correct + se_correct)*100),
+    aes(ymin = (mean_correct - (1.96*se_correct))*100,
+        ymax = (mean_correct + (1.96*se_correct))*100),
     width = 2,
     color = "black",
     alpha = .7,
     size = 1) +
+  # plot one point per question/item
   geom_point(aes(fill = graph_type),
              shape = 21, color = "black", size = 2) +
+  # facet by task type and test
   facet_wrap(~ task_type_merged + test_name,
              ncol = 5, scales = "free_y") +
+  # adjust x-axis label orientation for readability
   theme(axis.text.x = element_text(angle = 45,
                                    hjust = 1,
                                    size = 1),
         legend.position = "none") +
+  # fix scale to be 0-100, breaks of 25
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25)) +
-  labs(title = "Item Difficulty by Task Type & Test",
+  # add title and axis labels
+  labs(title = "Individual Item Difficulty by Task Type & Test",
        x = "Question",
        y = "% correct")
 
+# export plot
+ggsave((paste0(figures_dir,
+               "pct_correct_tasktype_test.png")),
+       width = 20, height = 10, device = "png")
+
 ```
 
-### Plot Averages by Task Type
+### Viz 2: % correct averages by task type
+
+The plot below shows that even though different tests contained items of the same "task
+type", their respective item difficulty still varied across tests.
 
 ```{r}
 
+# create new sub-dataframe: Within a given test, collapse across a given task type and compute % of participants who responded correctly (mean), SD, and SE
 df.task_summary_tasktype =
   df.raw %>%
+  # group by test and task type
   group_by(test_name, task_type_merged) %>%
+  # compute mean
   summarise(mean_correct = mean(correct_response, na.rm = T),
+            # compute SD
             sd_correct = sd(correct_response, na.rm = T),
+            # compute number of responses
             n = n(),
-            se_correct = sd_correct / sqrt(n))
+            # compute SE
+            (1.96*se_correct) = sd_correct / sqrt(n))
 
 ```
 
 ```{r fig.width = 10, fig.height = 6}
 
 df.task_summary_tasktype %>%
+  # test type on x-axis
   ggplot(aes(x = test_name,
+             # % correct on y-axis
              y = (mean_correct*100),
+             # color by test name
              fill = test_name,
              color = test_name)) +
-  geom_errorbar(aes(ymin = (mean_correct - se_correct)*100,
-              ymax = (mean_correct + se_correct)*100),
+  # add CIs based on 1.96*SE
+  geom_errorbar(aes(ymin = (mean_correct - (1.96*(1.96*se_correct)))*100,
+              ymax = (mean_correct + (1.96*se_correct))*100),
           position = position_dodge(width = 0.9),
           width = 0.1,
           color = "black") +
+  # Add one point for each % correct collapsed across task type
   geom_point(position = position_dodge(width = 0.9),
              width = 1,
              size = 3) +
+  # Adjust scales to be 0-100
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25),
                      labels = scales::percent_format(scale = 1)) +
+  # Add title and axis labels
   labs(title = "% correct averaged across Task Type",
        x = "Task Type",
        y = "% correct",
        fill = "Test") +
+  # Adjust theme
   theme_minimal(base_size = 18) +
   theme(axis.text.x = element_blank(),
         axis.title.x = element_blank(),
         legend.position = "bottom") +
   guides(fill = "none") +
+  # Facet by task type
   facet_grid(~task_type_merged)
+
+# export plot
+ggsave((paste0(figures_dir,
+               "pct_correct_tasktype.png")),
+       width = 10, height = 6, device = "png")
 
 ```
 
-## Single-item descriptives for % correct
+### Descriptives: Single-item descriptives for % correct
+
+In the output below, we see that on some items, as few as 1% of participants selected the
+correct response (very difficult items), and on other items, as many as 99% of
+participants selected the correct response (very easy items).
+
+Across items, SDs of % correct ranged from 10.6% to 50%.
 
 ```{r}
 
-## Averages, SDs, mins and maxes
+## Across dataset, compute means and SDs as well as mins and maxes for each respective statistic
 df.wide_summary %>%
   dplyr::select(mean_correct, sd_correct) %>%
   summary()
 
-# Lowest average performance
+# Print 10 questions with lowest average % correct
 df.wide_summary %>%
   dplyr::select(question_text, mean_correct, sd_correct) %>%
   arrange(desc(mean_correct)) %>%
-  tail(n = 10)
+  tail(n = 10) %>%
+  print()
 
-# Highest average performance
+# Print 10 questions with highest average % correct
 df.wide_summary %>%
   dplyr::select(question_text, mean_correct, sd_correct) %>%
   arrange(desc(mean_correct)) %>%
-  head(n = 10)
+  head(n = 10) %>%
+  print()
 
-# Least variability
+# Print 10 questions with least variability
 df.wide_summary %>%
   dplyr::select(question_text, mean_correct, sd_correct) %>%
   arrange(desc(sd_correct)) %>%
-  tail(n = 10)
+  tail(n = 10) %>%
+  print()
 
-# Most variability
+# Print 10 questions with most variability
 df.wide_summary %>%
   dplyr::select(question_text, mean_correct, sd_correct) %>%
   arrange(desc(sd_correct)) %>%
-  head(n = 10)
+  head(n = 10) %>%
+  print()
 
 ```
 
 ## Phase 2: Defining & evaluating statistical models
 
-### Question 1: Are items that were designed to misleader harder than those that were not? (I.e., does misleading nature predict item difficulty as per % correct?)
+In the dataset we examined above, we have data from a series of tests that (supposedly)
+tap data viz literacy. Notably, not all items in and across these tests are the same. In
+any test, you want a variety of items. Based on this variety, it’s likely some items will
+be harder (and some will be easier) than others. I begin by performing some sanity checks
+that assess whether the items we would expect to be harder were indeed harder for
+participants (as per lower % correct).
 
-H1: For CALVI, misleading items are lower % correct (higher difficulty) than
+### RQ1: Are items that were *designed to mislead* harder than those that were not?
+
+That is, does misleading nature (categorical; yes vs. no) predict % correct?
+
+**Note:** Only CALVI included misleading items. Thus, we examine data only from this test
+(4,082 responses from *N* = 425 participants).
+
+**Prediction:** Misleading items are lower % correct (i.e., higher difficulty) than
 non-misleading items.
+
+**Method:** Simple regression: $y = b_0 + x*b_1$, where $y$ = % correct and $x$ =
+misleading nature (0 or 1).
 
 ```{r}
 
@@ -238,12 +314,15 @@ df.misleading =
   df.raw %>%
   # Keep only relevant cols
   dplyr::select(participant_id, question_text, test_name, graph_type, task_type_merged, correct_response, misleading_item) %>%
-  # Keep only CALVI data
+  # Filter for CALVI data
   filter(test_name == "CALVI") %>%
-  # Convert into factor
+  # Convert "misleading nature" into factor (True vs false)
   mutate(misleading_item = factor(misleading_item))
 
 ```
+
+Out of the 48 items we have data on in CALVI, 36 are misleading (75%), and 12 are not
+(25%).
 
 ```{r}
 
@@ -254,51 +333,103 @@ df.misleading %>%
 
 ```
 
+#### Descriptives: Mean and SD for misleading vs. non-misleading items
+
+```{r}
+
+df.misleading %>%
+  group_by(misleading_item) %>%
+  summarise(mean = mean(correct_response, na.rm = T),
+            sd = sd(correct_response, na.rm = T),
+            n = n())
+
+```
+
+#### Viz 3: % correct for misleading vs non-misleading items
+
+In line with the descriptive stats above, the plot shows that at first glance, the average
+% correct for misleading items seems to be lower than the average % correct for
+non-misleading items.
+
 ```{r fig.width = 16, fig.height = 8}
 
 # Plot the raw data
 df.misleading %>%
+  # misleading nature (true vs false) on x-axis
   ggplot(aes(x = misleading_item,
+             # % correct on y-axis
              y = (correct_response*100),
+             # color by misleading nature
              fill = misleading_item)) +
-    geom_point(position = position_jitter(width = .3,
-                                          height = 0),
-               shape = 21,
-               size = 2,
-               alpha = .3) +
+  # add raw data points
+  geom_point(position = position_jitter(width = .3,
+                                        height = 0),
+             shape = 21,
+             size = 2,
+             alpha = .3) +
+  # add bootstrapped CIs for error bars
   stat_summary(fun.data = "mean_cl_boot",
                geom = "pointrange",
                color = "black",
                shape = 21,
                size = 1,
                linewidth = 3) +
+  # adjuts scales
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25),
                      labels = scales::percent_format(scale = 1)) +
+  # add color scale for fill
   scale_fill_brewer(palette = "Pastel2") +
+  # Adjust title and axis labels
   labs(title = "% correct by misleading vs. non-misleading items",
        x = "Misleading Item",
        y = "% correct",
        fill = "Misleading?") +
+  # Adjust theme
   theme_classic(base_size = 36) +
   theme(legend.position = "none")
+
+# export plot
+ggsave((paste0(figures_dir,
+               "pct_correct_misleading.png")),
+       width = 16, height = 8, device = "png")
   
 ```
 
+#### Regression Analysis: % correct \~ misleading
+
+The regression analysis shows that compared to a minimal model that fits the mean
+regardless of the difference in the nature of the items (misleading vs not misleading),
+the model including misleading nature as a predictor of % correct reduces the error by
+\~10%. Misleading nature is a weak predictor.
+
+*F*(1, 4080) = 431.54, p \< .001, $R^2$ = .095.
+
+*RMSE_model* = 0.472 vs *RMSE_baseline **=** .*496.
+
 ```{r}
 
-# Run empty model
+# Run empty model fitting the mean
 model.misleading_empty =
   lm(correct_response ~ 1,
       data = df.misleading)
 
-# Run augmented model with additional predictor
+model.misleading_empty %>%
+  summary()
+
+# RMSE
+rmse_empty =
+  model.misleading_empty %>% 
+  rmse(data = df.misleading)
+
+print(rmse_empty)
+
+########################
+
+# Run augmented model adding predictor of interest (misleading nature)
 model.misleading_augmented =
   lm(correct_response ~ 1 + misleading_item,
       data = df.misleading)
-
-# Compare two models
-anova(model.misleading_empty, model.misleading_augmented)
 
 # Print regression output
 model.misleading_augmented %>%
@@ -311,44 +442,62 @@ model.misleading_augmented %>%
 model.misleading_augmented %>%
   ggpredict()
 
+# Calculate model statistics
 model.misleading_augmented %>% 
   glance()
 
-# calculate RMSE
+# Compute RMSE
 rmse_misleading =
   model.misleading_augmented %>% 
   rmse(data = df.misleading)
 
+print(rmse_misleading)
+
+# Compare empty model with augmented model
+anova(model.misleading_empty, model.misleading_augmented)
+
 ```
+
+#### Model Visualizations
 
 ```{r fig.width = 16, fig.height = 8}
 
-# plot the data with empty model prediction
+# plot the data with line for empty model prediction (mean)
 df.misleading %>%
+  # x-axis is misleading nature
   ggplot(aes(x = misleading_item,
+             # y-axis is % correct
              y = (correct_response*100),
+             # color by misleading nature
              fill = misleading_item)) +
-    geom_point(position = position_jitter(width = .3,
-                                          height = 0),
-               shape = 21,
-               size = 2,
-               alpha = .3) +
+  # add raw data points
+  geom_point(position = position_jitter(width = .3,
+                                        height = 0),
+             shape = 21,
+             size = 2,
+             alpha = .3) +
+  # add bootstrapped CIs
   stat_summary(fun.data = "mean_cl_boot",
                geom = "pointrange",
                color = "black",
                shape = 21,
                size = 1,
                linewidth = 3) +
+  # add horizontal line for mean
   geom_hline(yintercept = mean(df.misleading$correct_response)*100,
-           color = "lightblue", size = 3) +
+             color = "lightblue", size = 3) +
+  # adjust scale
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25),
                      labels = scales::percent_format(scale = 1)) +
+  # specify color fill
   scale_fill_brewer(palette = "Pastel2") +
+  # add title and axis labels
   labs(title = "% correct by misleading vs. non-misleading items",
        x = "Misleading Item",
        y = "% correct",
        fill = "Misleading?") +
+  # adjust theme
   theme_classic(base_size = 36) +
   theme(legend.position = "none")
 
@@ -356,44 +505,61 @@ df.misleading %>%
 
 ```{r fig.width = 16, fig.height = 8}
 
-# plot the data with empty model prediction
+# plot the data with lines for augmented model predictions (separate fitted means for misleading and non-misleading items)
 df.misleading %>%
+  # x-axis = misleading nature
   ggplot(aes(x = misleading_item,
+             # y-axis = % correct
              y = (correct_response*100),
+             # fill by misleading nature
              fill = misleading_item)) +
-    geom_point(position = position_jitter(width = .3,
-                                          height = 0),
-               shape = 21,
-               size = 2,
-               alpha = .3) +
+  # add raw data points
+  geom_point(position = position_jitter(width = .3,
+                                        height = 0),
+             shape = 21,
+             size = 2,
+             alpha = .3) +
+  # add boostrapped CIs
   stat_summary(fun.data = "mean_cl_boot",
                geom = "pointrange",
                color = "black",
                shape = 21,
                size = 1,
                linewidth = 3) +
-  geom_hline(yintercept = mean(df.misleading$correct_response[df.misleading$misleading_item=="True"])*100,
-           color = "orange", size = 3) +
-    geom_hline(yintercept = mean(df.misleading$correct_response[df.misleading$misleading_item=="False"])*100,
+  # add separate fitted lines for each mean
+  geom_hline(yintercept = mean(df.misleading$correct_response[df.misleading$misleading_item == "True"])*100,
+             color = "orange", size = 3) +
+    geom_hline(yintercept = mean(df.misleading$correct_response[df.misleading$misleading_item == "False"])*100,
            color = "lightgreen", size = 3) +
+  # adjust scale
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25),
                      labels = scales::percent_format(scale = 1)) +
+  # specify color fill
   scale_fill_brewer(palette = "Pastel2") +
+  # add title and axis labels
   labs(title = "% correct by misleading vs. non-misleading items",
        x = "Misleading Item",
        y = "% correct",
        fill = "Misleading?") +
+  # adjust  theme
   theme_classic(base_size = 36) +
   theme(legend.position = "none")
 
 ```
 
-### Question 2: Does question length predict item difficulty?
+### RQ2: Are longer questions harder than shorter questions?
 
-H1: Longer questions show lower % correct (higher difficulty) than shorter questions.
+That is, does question length (continuous) predict % correct?
 
-(independent of test)
+**Note:** I examined data from all tests (15,616 responses from *N* = 426 participants and
+defined question length as the number of characters in the question.
+
+**Prediction:** Longer questions are lower % correct (i.e., higher difficulty) than short
+questions.
+
+**Method:** Simple regression: $y = b_0 + x*b_1$, where $y$ = % correct and $x$ = question
+length.
 
 ```{r}
 
@@ -402,7 +568,7 @@ df.length =
   df.raw %>%
   # Keep only relevant cols
   dplyr::select(participant_id, test_name, graph_type, task_type_merged, correct_response, question_text) %>%
-  # Convert into numerical variable
+  # Compute question length
   mutate(question_length = nchar(question_text))
 
 # create summary df
@@ -416,65 +582,87 @@ df.length_summary =
     question_length = nchar(first(question_text))
   ) %>%
   ungroup()
-  # %>%
-  # filter(question_length < 375)
 
 ```
 
+#### Descriptives: Mean and SD of question length
+
+There is some variation in question length both within and across tests, with the average
+question length ranging from 48 to 95 characters.
+
 ```{r}
 
-# Plot the raw data
+# create summary statistics for question length variable
+df.length %>%
+  group_by(test_name) %>%
+  summarise(mean = mean(question_length),
+            sd = sd(question_length))
+
+```
+
+#### Viz 4: % correct by question length
+
+The plot shows that at first glance, most questions are clustered around question length
+50-150. Even within that range, % correct is highly variable, and there is not much of a
+visually clear trend.
+
+```{r}
+
+# Plot raw data
 df.length_summary %>%
+  # x-axis = question length
   ggplot(aes(x = question_length,
+             # y-axis = % correct
              y = percent_correct)) +
-    geom_point(position = position_jitter(width = .5,
-                                          height = 0),
-               size = 2,
-               alpha = .3) +
+  # plot raw data
+  geom_point(position = position_jitter(width = .5,
+                                        height = 0),
+             size = 2,
+             alpha = .3) +
+  # adjust scale
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25),
                      labels = scales::percent_format(scale = 1)) +
   xlim(0, 375) +
+  # add axis labels
   labs(y = "% correct",
        x = "Question Length")
 
 ```
 
-```{r}
+#### Regression Analysis: % correct \~ question length
 
-# plot empty model with mean
-df.length_summary %>%
-  ggplot(aes(x = question_length,
-             y = percent_correct)) +
-    geom_point(position = position_jitter(width = .5,
-                                          height = 0),
-               size = 2,
-               alpha = .6) +
-  scale_y_continuous(limits = c(0, 100),
-                     breaks = seq(0, 100, 25),
-                     labels = scales::percent_format(scale = 1)) +
-  geom_hline(yintercept = mean(df.length_summary$percent_correct),
-             color = "lightblue", size = 1) +
-  xlim(0, 375) +
-  labs(y = "% correct",
-       x = "Question Length")
+The regression analysis shows that compared to a minimal model that fits the mean
+regardless of the difference in question length, the model including question length as a
+predictor of % correct reduces the error by \~4%. Question length is a weak predictor.
 
-```
+*F*(1, 148) = 6.992, *p* = .009, $R^2$ = .039.
+
+*RMSE_model* = 26.84 vs *RMSE_baseline **=*** 27.46.
 
 ```{r}
 
-# Run empty model
+# Run empty model fitting the mean
 model.length_empty =
   lm(percent_correct ~ 1,
       data = df.length_summary)
 
-# Run augmented model with additional predictor
+model.length_empty %>%
+  summary()
+
+# RMSE
+rmse_empty =
+  model.length_empty %>% 
+  rmse(data = df.length_summary)
+
+print(rmse_empty)
+
+########################
+
+# Run augmented model adding predictor of interest (question length)
 model.length_augmented =
   lm(percent_correct ~ 1 + question_length,
       data = df.length_summary)
-
-# Compare two models
-anova(model.length_empty, model.length_augmented)
 
 # Print regression output
 model.length_augmented %>%
@@ -483,42 +671,112 @@ model.length_augmented %>%
 model.length_augmented %>%
   joint_tests()
 
+# Calculate model statistics
 model.length_augmented %>% 
   glance()
 
-# calculate RMSE
-rmse_length =
+# Compute RMSE
+rmse_questionlength =
   model.length_augmented %>% 
   rmse(data = df.length_summary)
+
+print(rmse_questionlength)
+
+# Compare empty model with augmented model
+anova(model.length_empty, model.length_augmented)
+
+
+```
+
+#### Model Visualizations
+
+```{r}
+
+# plot empty model with mean
+df.length_summary %>%
+  # x-axis = question length
+  ggplot(aes(x = question_length,
+             # y-axis = % correct
+             y = percent_correct)) +
+  # plot raw data points
+  geom_point(position = position_jitter(width = .5,
+                                        height = 0),
+             size = 2,
+             alpha = .5) +
+  # adjust scale
+  scale_y_continuous(limits = c(0, 100),
+                     breaks = seq(0, 100, 25),
+                     labels = scales::percent_format(scale = 1)) +
+  # add fitted line for mean
+  geom_hline(yintercept = mean(df.length_summary$percent_correct),
+             color = "lightblue", size = 1) +
+  xlim(0, 375) +
+  # adjust axis labels
+  labs(y = "% correct",
+       x = "Question Length")
 
 ```
 
 ```{r}
 
+# plot the data with a fitted line for the augmented model predictions
 df.length_summary %>%
+  # question length on x-axis
   ggplot(aes(x = question_length,
+             # % correct on y-axis
              y = percent_correct)) +
+  # add raw data
   geom_point(alpha = 0.6, size = 2) +
+  # add regression line
   geom_smooth(method = "lm", se = TRUE, color = "lightblue") +
+  # adjuts scale
   scale_y_continuous(limits = c(0, 100),
                      breaks = seq(0, 100, 25),
                      labels = scales::percent_format(scale = 1)) +
+  # add title and axis labels
   labs(title = "% correct by question length",
        x = "Question Length",
        y = "% correct")
 
 ```
 
-## Item Discrimination and Item Information
+### RQ3: How informative and discriminative are the items in relation to data visualization literacy?
+
+#### Item Discrimination and Item Information
 
 ```{r}
 
+# create new df
 df.irt =
   df.raw
 
 ```
 
-### WAN
+Next, we evaluate item information and item discrimination for all test items across all
+tests from an IRT perspective.
+
+In IRT, item difficulty is defined as the level of latent ability (i.e., data
+visualization) or point on the ability scale (represented by theta) needed to have a 50%
+probability of getting the item right. Harder items require more ability to have a 50%
+probability of getting the item right. Easier items require less ability to have a 50%
+probability of getting the item right.
+
+We fit two-parameter logistic (2PL) models, where the expected difference in performance
+(i.e., probability of getting the item right) depends not just on ability level but also
+the specific item in question.
+
+**Item information** represents each item's ability to differentiate between test-takers
+based on ability level (theta). We plot item information using Item Characteristic Curves
+(ICCs), where the x-axis represents ability level (theta), and the y-axis represents
+probability of getting a correct response. Higher item information is better.
+
+**Item discrimination** represents how strongly related a given item is to the latent
+ability in question as assessed by the broader test. Items with higher discrimination are
+better at differentiating test-takers. More formally, it is the slope of a tangent at the
+point of inflection of the item response function (IRF), or the point on the logistic
+curve at which the curvature changes signs.
+
+##### WAN
 
 ```{r}
 
@@ -535,11 +793,11 @@ model.2pl =
   ltm(df.irt_wide ~ z1,
       IRT.param = TRUE, control = list(iter.em = 1000))
 
-# item discrimination
+# item characteristic curve
 plot(model.2pl,
      type = "ICC", zrange = c(-4, 4))
 
-# item information
+# item information curve
 plot(model.2pl,
      type = "IIC", zrange = c(-4, 4))
 
@@ -551,7 +809,7 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-### GGR
+##### GGR
 
 ```{r}
 
@@ -687,7 +945,7 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-## Simulate a guessing participant
+### RQ4: How well does a model simulating a low-literacy, guessing participant perform?
 
 ```{r}
 
@@ -874,7 +1132,7 @@ cat("Baseline RMSE =", round(baseline_rmse, 1),"%\n",
 
 ```
 
-## Predicting Held Out Data
+## Predicting the Held-Out Data
 
 ```{r}
 
@@ -977,6 +1235,6 @@ export =
   arrange(item_id)
 
 # export predictions
-readr::write_csv(export, "predictions.csv")
+readr::write_csv(export, paste0(data_dir, "predictions.csv"))
 
 ```
