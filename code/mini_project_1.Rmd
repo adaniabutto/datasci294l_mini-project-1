@@ -116,7 +116,7 @@ df.wide_summary =
                    # compute number of responses
                    n = n(),
                    # compute SE (SD / sqrt of n)
-                   (1.96*se_correct) = sd_correct/sqrt(n),) %>%
+                   se_correct = sd_correct/sqrt(n)) %>%
   ungroup()
 
 # print top rows
@@ -191,7 +191,7 @@ df.task_summary_tasktype =
             # compute number of responses
             n = n(),
             # compute SE
-            (1.96*se_correct) = sd_correct / sqrt(n))
+            se_correct = sd_correct / sqrt(n))
 
 ```
 
@@ -285,7 +285,7 @@ df.wide_summary %>%
 
 ```
 
-## Phase 2: Defining & evaluating statistical models
+# Phase 2: Defining & evaluating statistical models
 
 In the dataset we examined above, we have data from a series of tests that (supposedly)
 tap data viz literacy. Notably, not all items in and across these tests are the same. In
@@ -294,7 +294,7 @@ be harder (and some will be easier) than others. I begin by performing some sani
 that assess whether the items we would expect to be harder were indeed harder for
 participants (as per lower % correct).
 
-### RQ1: Are items that were *designed to mislead* harder than those that were not?
+## RQ1: Are items that were *designed to mislead* harder than those that were not?
 
 That is, does misleading nature (categorical; yes vs. no) predict % correct?
 
@@ -333,7 +333,7 @@ df.misleading %>%
 
 ```
 
-#### Descriptives: Mean and SD for misleading vs. non-misleading items
+### Descriptives: Mean and SD for misleading vs. non-misleading items
 
 ```{r}
 
@@ -345,7 +345,7 @@ df.misleading %>%
 
 ```
 
-#### Viz 3: % correct for misleading vs non-misleading items
+### Viz 3: % correct for misleading vs non-misleading items
 
 In line with the descriptive stats above, the plot shows that at first glance, the average
 % correct for misleading items seems to be lower than the average % correct for
@@ -396,7 +396,7 @@ ggsave((paste0(figures_dir,
   
 ```
 
-#### Regression Analysis: % correct \~ misleading
+### Regression Analysis: % correct \~ misleading
 
 The regression analysis shows that compared to a minimal model that fits the mean
 regardless of the difference in the nature of the items (misleading vs not misleading),
@@ -405,7 +405,8 @@ the model including misleading nature as a predictor of % correct reduces the er
 
 *F*(1, 4080) = 431.54, p \< .001, $R^2$ = .095.
 
-*RMSE_model* = 0.472 vs *RMSE_baseline **=** .*496.
+*RMSE_model* = 0.472 vs *RMSE_baseline **=** .*496 (scale: percentage points in decimal
+format, 0-1)
 
 ```{r}
 
@@ -458,7 +459,7 @@ anova(model.misleading_empty, model.misleading_augmented)
 
 ```
 
-#### Model Visualizations
+### Model Visualizations
 
 ```{r fig.width = 16, fig.height = 8}
 
@@ -548,7 +549,7 @@ df.misleading %>%
 
 ```
 
-### RQ2: Are longer questions harder than shorter questions?
+## RQ2: Are longer questions harder than shorter questions?
 
 That is, does question length (continuous) predict % correct?
 
@@ -585,7 +586,7 @@ df.length_summary =
 
 ```
 
-#### Descriptives: Mean and SD of question length
+### Descriptives: Mean and SD of question length
 
 There is some variation in question length both within and across tests, with the average
 question length ranging from 48 to 95 characters.
@@ -600,7 +601,7 @@ df.length %>%
 
 ```
 
-#### Viz 4: % correct by question length
+### Viz 4: % correct by question length
 
 The plot shows that at first glance, most questions are clustered around question length
 50-150. Even within that range, % correct is highly variable, and there is not much of a
@@ -630,7 +631,7 @@ df.length_summary %>%
 
 ```
 
-#### Regression Analysis: % correct \~ question length
+### Regression Analysis: % correct \~ question length
 
 The regression analysis shows that compared to a minimal model that fits the mean
 regardless of the difference in question length, the model including question length as a
@@ -638,7 +639,8 @@ predictor of % correct reduces the error by \~4%. Question length is a weak pred
 
 *F*(1, 148) = 6.992, *p* = .009, $R^2$ = .039.
 
-*RMSE_model* = 26.84 vs *RMSE_baseline **=*** 27.46.
+*RMSE_model* = 26.84 vs *RMSE_baseline **=*** 27.46 (scale: whole percentage points,
+0-100)
 
 ```{r}
 
@@ -688,7 +690,7 @@ anova(model.length_empty, model.length_augmented)
 
 ```
 
-#### Model Visualizations
+### Model Visualizations
 
 ```{r}
 
@@ -740,9 +742,9 @@ df.length_summary %>%
 
 ```
 
-### RQ3: How informative and discriminative are the items in relation to data visualization literacy?
+## RQ3: How informative and discriminative are the items in relation to data visualization literacy?
 
-#### Item Discrimination and Item Information
+### Item Discrimination and Item Information
 
 ```{r}
 
@@ -763,7 +765,8 @@ probability of getting the item right.
 
 We fit two-parameter logistic (2PL) models, where the expected difference in performance
 (i.e., probability of getting the item right) depends not just on ability level but also
-the specific item in question.
+the specific item in question. In other words, subjects' responses are predicted by the
+(hypothesized) ability as well as item difficulty.
 
 **Item information** represents each item's ability to differentiate between test-takers
 based on ability level (theta). We plot item information using Item Characteristic Curves
@@ -776,28 +779,38 @@ better at differentiating test-takers. More formally, it is the slope of a tange
 point of inflection of the item response function (IRF), or the point on the logistic
 curve at which the curvature changes signs.
 
-##### WAN
+#### WAN
 
-```{r}
+In the plots below, we see that for many items, respondents very low on data visualization
+literacy still have a decent probability of choosing the correct answer. Items differ
+quite widely in their discrimination.
+
+```{r warning = F, message = F, results='hide'}
 
 # Run for WAN
 df.irt_wide = 
   df.irt %>%
+  # Filter for WAN items
   filter(test_name == "WAN") %>%
   dplyr::select(participant_id, item_id, correct_response) %>%
   pivot_wider(names_from = item_id,
               values_from = correct_response) %>%
   dplyr::select(-c(participant_id))
 
+# run 2pl model
 model.2pl =
+  # predict by difficulty + ability
   ltm(df.irt_wide ~ z1,
-      IRT.param = TRUE, control = list(iter.em = 1000))
+      # print IRT parameters (coefficient estimates of item difficulty and discrimination)
+      IRT.param = TRUE,
+      # 1000 iterations to yield estimates
+      control = list(iter.em = 1000))
 
-# item characteristic curve
+# item characteristic curves
 plot(model.2pl,
      type = "ICC", zrange = c(-4, 4))
 
-# item information curve
+# item information plot
 plot(model.2pl,
      type = "IIC", zrange = c(-4, 4))
 
@@ -809,29 +822,39 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-##### GGR
+#### GGR
 
-```{r}
+In the plots below, we see that some items follow a step function. For some items, item
+difficulty is high (even with high levels of ability, respondents have a low estimated
+probability of selecting the correct answer. Again, items differ quite widely in their
+discrimination.
+
+```{r warning = F, message = F, results='hide'}
 
 # Run for GGR
 df.irt_wide = 
   df.irt %>%
+  # Filter for GGR items
   filter(test_name == "GGR") %>%
   dplyr::select(participant_id, item_id, correct_response) %>%
   pivot_wider(names_from = item_id,
               values_from = correct_response) %>%
   dplyr::select(-c(participant_id))
 
-# fit 2 parameter model
+# run 2pl model
 model.2pl =
+  # predict by difficulty + ability
   ltm(df.irt_wide ~ z1,
-      IRT.param = TRUE, control = list(iter.em = 1000))
+      # print IRT parameters (coefficient estimates of item difficulty and discrimination)
+      IRT.param = TRUE,
+      # 1000 iterations to yield estimates
+      control = list(iter.em = 1000))
 
-# item discrimination
+# item characteristic curves
 plot(model.2pl,
      type = "ICC", zrange = c(-4, 4))
 
-# item information
+# item information plot
 plot(model.2pl,
      type = "IIC", zrange = c(-4, 4))
 
@@ -843,29 +866,36 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-### BRBF
+#### BRBF
 
-```{r}
+The algorithm did not converge.
+
+```{r warning = F, message = F, results='hide'}
 
 # Run for BRBF
 df.irt_wide = 
   df.irt %>%
+  # filter for BRBF items
   filter(test_name == "BRBF") %>%
   dplyr::select(participant_id, item_id, correct_response) %>%
   pivot_wider(names_from = item_id,
               values_from = correct_response) %>%
   dplyr::select(-c(participant_id))
 
-# fit 2 parameter model
+# run 2pl model
 model.2pl =
+  # predict by difficulty + ability
   ltm(df.irt_wide ~ z1,
-      IRT.param = TRUE, control = list(iter.em = 1000))
+      # print IRT parameters (coefficient estimates of item difficulty and discrimination)
+      IRT.param = TRUE,
+      # 1000 iterations to yield estimates
+      control = list(iter.em = 1000))
 
-# item discrimination
+# item characteristic curves
 plot(model.2pl,
      type = "ICC", zrange = c(-4, 4))
 
-# item information
+# item information plot
 plot(model.2pl,
      type = "IIC", zrange = c(-4, 4))
 
@@ -877,29 +907,40 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-### VLAT
+#### VLAT
 
-```{r}
+In the plots below, we see that for many items, respondents low on data visualization
+literacy still have a decent probability of choosing the correct answer. Items differ
+quite widely in their discrimination. For some items, item difficulty is high (even with
+high levels of ability, respondents have a low estimated probability of selecting the
+correct answer.
+
+```{r warning = F, message = F, results='hide'}
 
 # Run for VLAT
 df.irt_wide = 
   df.irt %>%
+  # filter for VLAT items
   filter(test_name == "VLAT") %>%
   dplyr::select(participant_id, item_id, correct_response) %>%
   pivot_wider(names_from = item_id,
               values_from = correct_response) %>%
   dplyr::select(-c(participant_id))
 
-# fit 2 parameter model
+# run 2pl model
 model.2pl =
+  # predict by difficulty + ability
   ltm(df.irt_wide ~ z1,
-      IRT.param = TRUE, control = list(iter.em = 1000))
+      # print IRT parameters (coefficient estimates of item difficulty and discrimination)
+      IRT.param = TRUE,
+      # 1000 iterations to yield estimates
+      control = list(iter.em = 1000))
 
-# item discrimination
+# item characteristic curves
 plot(model.2pl,
      type = "ICC", zrange = c(-4, 4))
 
-# item information
+# item information plot
 plot(model.2pl,
      type = "IIC", zrange = c(-4, 4))
 
@@ -911,29 +952,37 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-### CALVI
+#### CALVI
 
-```{r}
+In the plots below, we see that for many items, IICs seem uninterpretable; as ability
+level increases, respondents have a lower probability of selecting the correct answer.
 
-# Run for VLAT
+```{r warning = F, message = F, results='hide'}
+
+# Run for CALVI
 df.irt_wide = 
   df.irt %>%
+  # filter for CALVI
   filter(test_name == "CALVI") %>%
   dplyr::select(participant_id, item_id, correct_response) %>%
   pivot_wider(names_from = item_id,
               values_from = correct_response) %>%
   dplyr::select(-c(participant_id))
 
-# fit 2 parameter model
+# run 2pl model
 model.2pl =
+  # predict by difficulty + ability
   ltm(df.irt_wide ~ z1,
-      IRT.param = TRUE, control = list(iter.em = 1000))
+      # print IRT parameters (coefficient estimates of item difficulty and discrimination)
+      IRT.param = TRUE,
+      # 1000 iterations to yield estimates
+      control = list(iter.em = 1000))
 
-# item discrimination
+# item characteristic curves
 plot(model.2pl,
      type = "ICC", zrange = c(-4, 4))
 
-# item information
+# item information plot
 plot(model.2pl,
      type = "IIC", zrange = c(-4, 4))
 
@@ -945,23 +994,36 @@ IRT.WrightMap(fit_2pl_tam)
 
 ```
 
-### RQ4: How well does a model simulating a low-literacy, guessing participant perform?
+## RQ4: How well does a model simulating a low-literacy, guessing participant perform?
+
+The item discrimination and item information analyses suggest that even students with
+relatively low data visualization literacy have a non-negligible chance of getting the
+correct response on various items.
+
+Next, we run a model representing a student with low data visualization literacy who
+"guesses" the answer to a given item in a semi-informed manner (e.g., using an exclusion
+strategy or similar).
+
+### Data Wrangling
 
 ```{r}
 
 # define dataset
 df.irt_wide = 
   df.irt %>%
+  # keep only items and response values
   dplyr::select(participant_id, item_id, correct_response) %>%
+  # create matrix containing only 1s and 0s for correct/incorrect responses
   pivot_wider(names_from = item_id,
               values_from = correct_response) %>%
+  # remove participant id
   dplyr::select(-c(participant_id))
 
 ```
 
 ```{r}
 
-# add column with binary vs MC information
+# create df with column representing binary vs MC nature of each item
 df.binaryvsmc =
   df.irt %>% 
   dplyr::select(item_id, possible_responses, correct_response) %>% 
@@ -970,11 +1032,14 @@ df.binaryvsmc =
   mutate(n_options = str_count(possible_responses, ",") + 1,
          item_type = if_else(n_options == 2, "binary", "mc"))
 
+# obtain lists of item ids for binary and mc items
+# binary items
 binary_items =
   df.binaryvsmc %>%
   filter(item_type == "binary") %>%
   pull(item_id)
 
+# mc items
 mc_items =
   df.binaryvsmc %>%
   filter(item_type == "mc") %>%
@@ -982,27 +1047,51 @@ mc_items =
 
 ```
 
-```{r}
+### Modeling
 
-# predictions for binary items
+#### Binary Items: IRT-based model
+
+For binary items, we use a 2PL model where we set the latent ability (or theta) to \~1 SD
+below the average to simulate a low-literacy test-taker.
+
+For any item whose difficulty is around –1, the 2-PL yields about a coin-flip chance of
+obtaining the correct response.
+
+$$P(\text{correct}\mid\theta=-1) \;
+=\; \text{logit}^{-1}\!\bigl(a(\theta-b)\bigr)
+\approx 0.50.$$
+
+For easier items (difficulty \< –1) the model lets the learner do better than chance, and
+for harder items (b \> –1) it lets them do worse.
+
+```{r results='hide'}
+
+# fit 2pl model to generate predictions for binary items
 model.2pl =
+  # predict by difficulty + ability
   ltm(df.irt_wide ~ z1,
-      IRT.param = TRUE, control = list(iter.em = 1000))
+      # print IRT parameters (coefficient estimates of item difficulty and discrimination)
+      IRT.param = TRUE,
+      # 1000 iterations to yield estimates
+      control = list(iter.em = 1000))
 
+# pass coefficients from model as parameters
 pars = coef(model.2pl)
+
+# define logistic function, where a = discrimination and b = difficulty
 logistic =
   function(theta, a, b) 1 / (1 + exp(-a * (theta - b)))
 
-# define data viz literacy as 1 SD below the mean
+# define data viz literacy as 1 SD below the mean (theta = -1)
 theta = -1
 
-# get discrimination and difficulty
+# obtain discrimination and difficulty for binary items
 P_binary =
   logistic(theta,
            pars[binary_items, "Dscrmn"],
            pars[binary_items, "Dffclt"])
 
-# generate prediction for each item
+# generate predictions for each item
 pred_binary =
   tibble(
     item_id = names(P_binary),
@@ -1011,6 +1100,12 @@ pred_binary =
 
 ```
 
+#### MC Items: Exclusion-strategy guesser
+
+For multiple-choice items, we assume that the student follows an exclusion strategy: They
+can rule out a non-negligible number of options at a coin-flip rate, and then guess among
+the remaining options.
+
 ```{r}
 
 # predictions for MC items
@@ -1018,40 +1113,44 @@ pred_binary =
 # define parameters
 theta = .5 # chance the simulated student eliminates a given response option
 elim_prop  = .75 # student eliminates max 75 % of wrong options
-n_sim = 426 # we simulate N = 426 respondents
+n_sim = 426 # we simulate N = 426 respondents to match our data
 
 # define function to get prediction for each MC item
 get_mc_pred =
   function(opts_string, n_sim, theta, elim_prop) {
-    # count number of answer choices
+    # count the number of response options for each item
     n_options = str_count(opts_string, ",") + 1
-    # define number of wrong options as number of options minus 1
+    # define the number of wrong options as number of options minus 1
     k_wrong = n_options - 1
     if (k_wrong == 0) return(1)
-    # set dynamic maximum of eliminated options (≥ 50% of options)
+    # set a dynamic maximum of eliminated options (≤ 75% of options)
     max_elim = floor(elim_prop * k_wrong)
-    # chance the student successfully eliminates any single wrong option based on parameters above
+    # set chance the student successfully eliminates any single wrong option based on parameters above
     n_elim = pmin(rbinom(n_sim, k_wrong, theta), max_elim)
-    # remaining wrong options is number as wrong options minus eliminated options
+    # define the remaining wrong options as the number of wrong options minus eliminated options
     remain_wrong = k_wrong - n_elim
     # calculate expected probability of dplyr::selecting correct response
     mean(1 / (remain_wrong + 1))
   }
 
+# generate predictions for each mc item
 pred_mc =
   df.binaryvsmc %>% 
+  # filter for mc items
   filter(item_type == "mc") %>% 
   distinct(item_id, possible_responses) %>%
   mutate(
     proportion_correct = round(
       100 * map_dbl(
         possible_responses,
+        # run prediction function using three parameters
         ~ get_mc_pred(.x,
                       n_sim = n_sim,
                       theta = theta,
                       elim_prop = elim_prop)
         ), 2) # round to two digits
   ) %>% 
+  # keep only relevant cols
   dplyr::select(item_id, proportion_correct)
 
 ```
@@ -1081,13 +1180,15 @@ observed_final =
             .groups = "drop") %>% 
   mutate(item_id = as.numeric(item_id))
 
-# create new dataset merging with predictions
+# create new dataset merging observed proportions with predicted proportions
 results =
   prediction_final %>% 
   rename(predicted_prop = proportion_correct) %>% 
   left_join(observed_final, by = "item_id")
 
 ```
+
+#### Viz 5: Predicted vs Observed Item Difficulty
 
 ```{r fig.width = 10, fig.height = 6}
 
@@ -1102,6 +1203,10 @@ results %>%
   geom_abline(intercept = 0, slope = 1, linetype = "dashed",
               color = "darkblue", size = 1) +
   scale_color_brewer(palette = "Set1", name = "Test") +
+  annotate("text", x = 100, y = 5,
+         label = paste0("r = ", round(correlation$estimate, 3)),
+         hjust = 1, vjust = 0,
+         size = 7, fontface = "bold") +
   labs(
     title  = "Predicted vs. Observed Item Difficulty (measured as % correct)",
     subtitle = "Individual dots represent individual test items",
@@ -1109,9 +1214,32 @@ results %>%
     y = "Observed % correct (N = 426 subjects)"
   )
 
+# export plot
+ggsave((paste0(figures_dir,
+               "guessing_model.png")),
+       width = 10, height = 6, device = "png")
+
 ```
 
+#### Model Statistics
+
+The correlation analysis shows that the model predictions are significantly but only
+weakly correlated with the observed data. The RMSE evaluation shows that the low-literacy
+guessing model performs worse than a baseline model that fits just the mean. In other
+words, the guessing model is not a good explanation for the data at hand; it is highly
+unlikely that high-performing respondents achieved a large number of correct responses by
+simply doing (informed) guessing.
+
+*r*(200) = .22, 95% CIs = [.09, .35], *p* = .002
+
+*RMSE_model* = 35.17 vs *RMSE_baseline **=*** 27.22 (scale: whole percentage points,
+0-100)
+
 ```{r}
+
+# Simple correlation
+correlation = cor.test(results$predicted_prop, results$actual_prop)
+print(correlation)
 
 # Calculate RMSE
 # RMSE of fitting the mean
@@ -1132,7 +1260,13 @@ cat("Baseline RMSE =", round(baseline_rmse, 1),"%\n",
 
 ```
 
-## Predicting the Held-Out Data
+# Predicting the Held-Out Data
+
+We have a held-out 20% of data that contains entirely new items. We now have the models
+above make predictions for that held-out dataset (predicting proportion correct for these
+new items).
+
+## Data Wrangling
 
 ```{r}
 
@@ -1149,17 +1283,23 @@ df.heldout_binaryvsmc =
   mutate(n_options = str_count(possible_responses, ",") + 1,
          item_type = if_else(n_options == 2, "binary", "mc"))
 
+# pull IDs for binary items
 binary_items =
   df.heldout_binaryvsmc %>%
   filter(item_type == "binary") %>%
   pull(item_id)
 
+# pull IDs for mc items
 mc_items =
   df.heldout_binaryvsmc %>%
   filter(item_type == "mc") %>%
   pull(item_id)
 
 ```
+
+## Modeling
+
+### Binary Items: IRT-based model
 
 ```{r}
 
@@ -1179,32 +1319,35 @@ pred_binary_heldout =
 
 ```
 
+### MC Items: Exclusion-strategy guesser
+
 ```{r}
 
 # run predictions for MC items
 # define parameters
 theta = .5 # chance the simulated student eliminates a given response option
 elim_prop  = .75 # student eliminates max 75 % of wrong options
-n_sim = 426 # we simulate N = 426 respondents
+n_sim = 426 # we simulate N = 426 respondents to match our data
 
 # define function to get prediction for each MC item
 get_mc_pred =
   function(opts_string, n_sim, theta, elim_prop) {
-    # count number of answer choices
+    # count the number of response options for each item
     n_options = str_count(opts_string, ",") + 1
-    # define number of wrong options as number of options minus 1
+    # define the number of wrong options as number of options minus 1
     k_wrong = n_options - 1
     if (k_wrong == 0) return(1)
-    # set dynamic maximum of eliminated options (≥ 50% of options)
+    # set a dynamic maximum of eliminated options (≤ 75% of options)
     max_elim = floor(elim_prop * k_wrong)
-    # chance the student successfully eliminates any single wrong option based on parameters above
+    # set chance the student successfully eliminates any single wrong option based on parameters above
     n_elim = pmin(rbinom(n_sim, k_wrong, theta), max_elim)
-    # remaining wrong options is number as wrong options minus eliminated options
+    # define the remaining wrong options as the number of wrong options minus eliminated options
     remain_wrong = k_wrong - n_elim
     # calculate expected probability of dplyr::selecting correct response
     mean(1 / (remain_wrong + 1))
   }
 
+# generate predictions for mc items
 pred_mc_heldout =
   df.heldout_binaryvsmc %>% 
   filter(item_type == "mc") %>% 
@@ -1213,12 +1356,14 @@ pred_mc_heldout =
     predicted_prop = round(
       100 * map_dbl(
         possible_responses,
+        # run prediction function using three parameters
         ~ get_mc_pred(.x,
                       n_sim = n_sim,
                       theta = theta,
                       elim_prop = elim_prop)
         ), 2) # round to two digits
   ) %>% 
+  # keep only relevant cols
   dplyr::select(item_id, predicted_prop)
 
 ```
@@ -1236,5 +1381,41 @@ export =
 
 # export predictions
 readr::write_csv(export, paste0(data_dir, "predictions.csv"))
+
+```
+
+### Viz 6: Predicted vs Observed Item Difficulty
+
+```{r fig.width = 12, fig.height = 6}
+
+results_heldout =
+  df.heldout %>%
+  dplyr::select(item_id, proportion_correct, test_name) %>%
+  rename(actual_prop = proportion_correct) %>%
+  left_join(export) %>%
+  rename(predicted_prop = proportion_correct)
+
+# plot
+results_heldout %>%
+  ggplot(aes(x = (predicted_prop*100),
+             y = (actual_prop*100),
+             color = test_name)) +
+  geom_point(alpha = 0.5, size = 2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed",
+              color = "darkblue", size = 1) +
+  scale_color_brewer(palette = "Set1", name = "Test") +
+  ylim(0, 100) +
+  xlim(0, 100) +
+  labs(
+    title  = "HELD-OUT DATA: Predicted vs. Observed Item Difficulty (measured as % correct)",
+    subtitle = "Individual dots represent individual test items",
+    x = "Predicted % correct ('low-literacy guessing student' model)",
+    y = "Observed % correct (N = 426 subjects)"
+  )
+
+# export plot
+ggsave((paste0(figures_dir,
+               "guessing_model_heldout.png")),
+       width = 12, height = 6, device = "png")
 
 ```
