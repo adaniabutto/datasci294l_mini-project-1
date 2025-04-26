@@ -37,6 +37,8 @@ library(lme4)          # for mixed effects models
 library(ltm)           # for IRT stuff
 library(TAM)
 library(psych)
+library(ggplotify)     # for plotting
+library(patchwork)
 
 ## set default code chunk options
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
@@ -123,6 +125,22 @@ df.wide_summary =
 
 # print top rows
 head(df.wide_summary, n = 10)
+
+```
+
+Below, we evaluate means and SDs per test:
+
+```{r}
+
+mean(df.wide_summary$mean_correct)
+sd(df.wide_summary$mean_correct)
+
+df.wide_summary %>%
+  group_by(test_name) %>%
+  summarise(mean = mean(mean_correct),
+            sd = sd(mean_correct),
+            min = min(mean_correct),
+            max = max(mean_correct))
 
 ```
 
@@ -905,8 +923,12 @@ model.2pl =
       control = list(iter.em = 1000))
 
 # item characteristic curves
-plot(model.2pl,
-     type = "ICC", zrange = c(-4, 4))
+icc_wan =
+  as.ggplot(~plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4),
+     main = "WAN"))
+
+icc_wan
 
 # item information plot
 plot(model.2pl,
@@ -949,8 +971,12 @@ model.2pl =
       control = list(iter.em = 1000))
 
 # item characteristic curves
-plot(model.2pl,
-     type = "ICC", zrange = c(-4, 4))
+icc_ggr =
+  as.ggplot(~plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4),
+     main = "GGR"))
+
+icc_ggr
 
 # item information plot
 plot(model.2pl,
@@ -990,12 +1016,16 @@ model.2pl =
       control = list(iter.em = 1000))
 
 # item characteristic curves
-plot(model.2pl,
-     type = "ICC", zrange = c(-4, 4))
+icc_brbf =
+  as.ggplot(~plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4),
+     main = "BRBF"))
+
+icc_brbf
 
 # item information plot
 plot(model.2pl,
-     type = "IIC", zrange = c(-4, 4))
+     type = "IIC", zrange = c(-4, 4),)
 
 # Wright map
 fit_2pl_tam =
@@ -1035,8 +1065,12 @@ model.2pl =
       control = list(iter.em = 1000))
 
 # item characteristic curves
-plot(model.2pl,
-     type = "ICC", zrange = c(-4, 4))
+icc_vlat =
+  as.ggplot(~plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4),
+     main = "VLAT"))
+
+icc_vlat
 
 # item information plot
 plot(model.2pl,
@@ -1077,8 +1111,12 @@ model.2pl =
       control = list(iter.em = 1000))
 
 # item characteristic curves
-plot(model.2pl,
-     type = "ICC", zrange = c(-4, 4))
+icc_calvi =
+  as.ggplot(~plot(model.2pl,
+     type = "ICC", zrange = c(-4, 4),
+     main = "CALVI"))
+
+icc_calvi
 
 # item information plot
 plot(model.2pl,
@@ -1089,6 +1127,39 @@ fit_2pl_tam =
   tam.mml.2pl(df.irt_wide)
 
 IRT.WrightMap(fit_2pl_tam)
+
+```
+
+```{r fig.height = 6, fig.width = 18}
+
+# plot all iccs together
+icc_plots =
+  list(
+  icc_wan,
+  icc_ggr,
+  icc_brbf,
+  icc_vlat,
+  icc_calvi
+)
+
+icc_plot =
+  icc_wan +
+  icc_ggr + 
+  icc_brbf +
+  icc_vlat +
+  icc_calvi +
+  plot_layout(ncol = 5) +
+  plot_annotation(
+    title = "ICCs by Test",
+    theme = theme(plot.title = element_text(hjust = 0.5))
+  )
+
+print(icc_plot)
+
+# export plot
+ggsave("icc_all_tests.png",
+       icc_plot,
+       width = 18, height = 6)
 
 ```
 
